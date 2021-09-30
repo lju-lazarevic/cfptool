@@ -1,0 +1,102 @@
+= Call for Papers Tool
+Making life easier for finding relevant conference call for papers
+
+Useful links:
+
+* https://www.crummy.com/software/BeautifulSoup/bs4/doc/[Beautiful Soup docs^]
+* https://pypi.org/project/googlesearch-python/[Google search^]
+* https://data.stackexchange.com/stackoverflow/query/new[StackExchange data explorer^]
+* https://data.stackexchange.com/stackoverflow/revision/1460801/1793126/top-tags-and-associated-synonyms[Specific query for top 200 tags^]
+* https://dev.neo4j.com/try[Neo4j Sandbox^]
+* https://arrows.app[Arrows diagramming tool^]
+* https://neo4j.com/docs/api/python-driver/current/[Neo4j Python drivers docs^]
+* https://neo4j.com/labs/apoc/4.1/[Neo4j APOC docs^]
+* https://neo4j.com/docs/graph-data-science/current/[Neo4j GDS docs^]
+
+=== Getting up and running
+The Jupyter notebook will get the initial Neo4j graph up and running. You will need to insert credentials for the instance of Neo4j you are using. The code is work in progress, to be optimised, and I apologise in advance for the terrible code :)
+
+If you've not already done so, I would suggest you get yourself a (free!) instance of https://dev.neo4j.com/try[Neo4j Sandbox^] up and running first.
+
+=== Querying the CfP graph
+Here are the queries that we will run against the graph during the session. You will need to have Neo4j Browser up and running for this.
+
+What are the most common tags? Hints at trends
+
+====
+[source,cypher]
+MATCH (e:Event)-->(t:Tag)
+RETURN t.value, count(e) AS size ORDER BY size DESC
+====
+
+What CfPs are closing within the next month? 
+
+====
+[source,cypher]
+MATCH (e:Event)-->(t:Tag) 
+WHERE date(e.cfpClosing) < date("2021-11-01")
+RETURN e.title, e.cfpClosing, e.description, collect(t.value) AS Tags 
+    ORDER BY e.cfpClosing
+====
+
+Find some data science-esque conferences
+
+====
+[source,cypher]
+WITH ['data science', 'machine learning', 'artificial intelligence', 'ai', 'ml', 'deep learning'] AS p 
+MATCH (l:Location)<--(e:Event)-->(t:Tag)
+WHERE t.value IN p
+RETURN DISTINCT e.title, e.description, l.value
+====
+
+Find conferences that have tags of data science and python
+
+====
+[source,cypher]
+WITH ['data science', 'python'] AS p
+MATCH (e:Event)
+WHERE ALL (i in p WHERE exists((e)--(:Tag {value:i})))
+RETURN e.title
+====
+
+Time for similarity - create a graph projection for similarity
+
+====
+[source,cypher]
+CALL gds.graph.create.cypher("similar", 
+"MATCH (e:Event) RETURN id(e) AS id",
+"MATCH (e1:Event)-->(t:Tag)<--(e2:Event) RETURN id(e1) AS source, id(e2) AS target")
+====
+
+Let's have a look at those similar events
+
+====
+[source,cypher]
+CALL gds.nodeSimilarity.stream("similar")
+YIELD node1, node2, similarity
+RETURN gds.util.asNode(node1).title, gds.util.asNode(node2).title, similarity 
+    ORDER BY similarity desc
+====
+
+Let's now connect similar events together, so that we can have a look at them
+
+====
+[source,cypher]
+CALL gds.nodeSimilarity.stream("similar")
+YIELD node1, node2, similarity
+WITH gds.util.asNode(node1) AS n1, gds.util.asNode(node2) AS n2, 
+	similarity WHERE similarity >= 0.8 AND id(n1)>id(n2)
+CREATE (n1)-[:SIMILAR_TO]->(n2)
+====
+
+And let's look at the result!
+
+====
+[source,cypher]
+MATCH (e:Event)-[:SIMILAR_TO]->(e2)
+WHERE NOT  ()-->(e)
+WITH e
+MATCH (e)-[:SIMILAR_TO*]->(e1), (e)-->(t:Tag)
+RETURN DISTINCT e.title, collect(distinct e1.title), collect(distinct t.value)
+====
+
