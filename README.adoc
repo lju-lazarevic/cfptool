@@ -1,6 +1,8 @@
 = Call for Papers Tool
 
-Making life easier for finding relevant conference call for papers.
+_Making life easier for finding relevant conference call for papers_
+
+link:docs/es2021slides.pdf[Slides from Extraction Summit 2021^]
 
 Useful links:
 
@@ -30,7 +32,7 @@ MATCH (e:Event)-->(t:Tag)
 RETURN t.value, count(e) AS size ORDER BY size DESC
 ====
 
-What CfPs are closing within the next month? 
+What CfPs are closing within the next month? This query is casting a string to DateTime - we can import/update this property to a DateTime type. Will do that later
 
 ====
 [source,cypher]
@@ -40,7 +42,7 @@ RETURN e.title, e.cfpClosing, e.description, collect(t.value) AS Tags
     ORDER BY e.cfpClosing
 ====
 
-Find some data science-esque conferences
+Find some data science-esque conferences. This query starts by providing an array of terms we'd commonly associate with data science, and then we're checking whether any of the tags linked to events contain those terms. As more than one of these array terms could map to the same event, we use `DISTINCT` to just bring back a single copy.
 
 ====
 [source,cypher]
@@ -50,7 +52,7 @@ WHERE t.value IN p
 RETURN DISTINCT e.title, e.description, l.value
 ====
 
-Find conferences that have tags of data science and python
+Find conferences that have tags of data science and python. Here we're again using an array, but this time around we want the tags associated with an event to include all of the terms.
 
 ====
 [source,cypher]
@@ -60,7 +62,7 @@ WHERE ALL (i in p WHERE exists((e)--(:Tag {value:i})))
 RETURN e.title
 ====
 
-Time for similarity - create a graph projection for similarity
+Time for similarity - create a graph projection for similarity. Think of a graph projection as an in memory 'view' of our original graph. The algorithm we are using is expecting a https://neo4j.com/graphacademy/training-iga-40/02-iga-40-overview-of-graph-algorithms/#_monopartite_versus_multipartite_graphs[monopartite graph^], so we are creating a view where the `Tag` node is being used as a bridge to show which events are connected to each other.
 
 ====
 [source,cypher]
@@ -69,7 +71,7 @@ CALL gds.graph.create.cypher("similar",
 "MATCH (e1:Event)-->(t:Tag)<--(e2:Event) RETURN id(e1) AS source, id(e2) AS target")
 ====
 
-Let's have a look at those similar events
+Let's have a look at those similar events. We are going to run the https://neo4j.com/docs/graph-data-science/current/algorithms/node-similarity/[node similarity^] algorithm across our graph projection, and then return a stream of event pairs, ordered by which ones are most similar.
 
 ====
 [source,cypher]
@@ -79,7 +81,7 @@ RETURN gds.util.asNode(node1).title, gds.util.asNode(node2).title, similarity
     ORDER BY similarity desc
 ====
 
-Let's now connect similar events together, so that we can have a look at them
+Let's now connect similar events together, so that we can have a look at them. Similar query as above, but now we are going to make a write to our graph. We are going to create a `SIMILAR_TO` relationship between our `Event` nodes where they are at least 80% similar as specified by the algorithm. To prevent having relationships in both directions between Event nodes, we're using the greater than 'trick' to just write in one relationship.
 
 ====
 [source,cypher]
@@ -90,7 +92,7 @@ WITH gds.util.asNode(node1) AS n1, gds.util.asNode(node2) AS n2,
 CREATE (n1)-[:SIMILAR_TO]->(n2)
 ====
 
-And let's look at the result!
+And let's look at the result! Here we are using the fact that there is only one relationship between the Event nodes, so we find the 'head node' of the similar group, and then do an unbounded directional traversal to pick up all the other similar events, collect them and then return them. We also show the tags for the 'head node' so we get an idea of the conference theme.
 
 ====
 [source,cypher]
