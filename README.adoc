@@ -1,5 +1,5 @@
 = Call for Papers Tool
-Making life easier for finding relevant conference call for papers
+Making life easier for finding relevant conference call for papers.
 
 Useful links:
 
